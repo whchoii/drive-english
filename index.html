@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="드라이브 영어">
+<title>드라이브 영어</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* Layout: one column for a phone on a dash mount — lesson header, mode switch,
+   one large "now playing" paragraph, then the full script; transport fixed at the thumb. */
+:root {
+  color-scheme: light dark;
+  --bg: #eef1f5; --surface: #ffffff; --ink: #111c2e; --muted: #5a677c; --line: #d3dae4;
+  --signal: #b45309; --signal-ink: #ffffff; --good: #15803d; --miss: #c2261c; --miss-bg: #fde3df;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-read: "Source Serif 4", Georgia, "Times New Roman", serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d1420; --surface: #172132; --ink: #e9eef6; --muted: #98a6bb; --line: #2a3850;
+    --signal: #f5a524; --signal-ink: #1a1203; --good: #4ade80; --miss: #ff8a7a; --miss-bg: #47201c;
+  }
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-ui); font-size: 16px; line-height: 1.55;
+  padding: calc(20px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 260px max(16px, env(safe-area-inset-left, 0px));
+}
+.wrap { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+button, select { font: inherit; color: inherit; cursor: pointer; }
+button { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button:focus-visible, a:focus-visible, select:focus-visible { outline: 3px solid var(--signal); outline-offset: 2px; }
+
+.top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.eyebrow { font-size: 13px; font-weight: 600; letter-spacing: .06em; color: var(--signal); text-transform: uppercase; }
+.nav { position: sticky; top: 0; z-index: 3; background: var(--bg); display: flex; gap: 6px; padding: 8px 0; margin: -8px 0; overflow-x: auto; }
+.nav button { flex: none; min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1.5px solid var(--line); background: var(--surface); font-size: 15px; font-weight: 600; white-space: nowrap; }
+.nav button.main { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+#stage, #scriptBox, #vocabBox { scroll-margin-top: 68px; }
+.pnav { display: flex; flex-wrap: wrap; gap: 6px; }
+.pnav button { min-width: 44px; min-height: 44px; border-radius: 22px; border: 1.5px solid var(--line); background: transparent; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pnav button[aria-current="true"] { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); }
+.stage-head { display: flex; flex-direction: column; gap: 10px; }
+#stageEn .w { border-radius: 5px; padding: 1px 2px; margin: -1px -2px; }
+#stageEn .w.now { background: var(--signal); color: var(--signal-ink); }
+dialog { border: 0; border-radius: 16px; padding: 0; width: min(560px, calc(100vw - 24px)); max-height: 80vh; background: var(--surface); color: var(--ink); }
+dialog::backdrop { background: rgba(0, 0, 0, .55); }
+.sheet-head { position: sticky; top: 0; background: var(--surface); display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 17px; }
+.sheet-head button { min-height: 44px; padding: 0 16px; border-radius: 22px; border: 1.5px solid var(--line); background: transparent; }
+#lessonList { list-style: none; margin: 0; padding: 0 16px 8px; }
+#lessonList li + li { border-top: 1px solid var(--line); }
+#lessonList button { width: 100%; text-align: left; background: none; border: 0; padding: 14px 0; display: flex; flex-direction: column; gap: 2px; }
+#lessonList .d { font-size: 13px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+#lessonList .t { font-family: var(--font-read); font-size: 18px; line-height: 1.35; }
+#lessonList li[aria-current="true"] .d, #lessonList li[aria-current="true"] .t { color: var(--signal); }
+
+/* 재생 중: 지금 문단만 화면 가득 크게 */
+body.focus { overflow: hidden; }
+body.focus .stage {
+  position: fixed; top: 0; left: 0; right: 0; bottom: var(--bar-h, 190px); z-index: 4;
+  border: 0; border-radius: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; gap: 16px;
+  padding: 0 max(20px, calc(50vw - 320px)) 48px;
+}
+body.focus .stage-head { position: sticky; top: 0; z-index: 1; background: var(--surface); padding: calc(12px + env(safe-area-inset-top, 0px)) 0 10px; border-bottom: 1px solid var(--line); }
+body.focus #stageEn { font-size: clamp(28px, 7.8vw, 40px); line-height: 1.45; }
+body.focus #stageKo { font-size: clamp(20px, 5.4vw, 26px); line-height: 1.5; }
+body.focus .stage.ko-phase #stageEn { font-size: 20px; color: var(--muted); }
+body.focus .stage.ko-phase #stageKo { font-size: clamp(26px, 7vw, 36px); color: var(--ink); }
+body.focus .opts { display: none; }
+h1 { font-family: var(--font-read); font-weight: 600; font-size: 26px; line-height: 1.2; margin: 6px 0; text-wrap: balance; }
+.title-ko { color: var(--muted); margin: 0; }
+.source { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+.source a { color: inherit; }
+
+.modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.modes button {
+  min-height: 64px; padding: 8px 10px; border-radius: 12px; text-align: left;
+  background: transparent; border: 1.5px solid var(--line);
+  display: flex; flex-direction: column; justify-content: center; gap: 2px;
+}
+.modes b { font-size: 17px; font-weight: 600; }
+.modes small { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.modes button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.modes button[aria-pressed="true"] small { color: inherit; opacity: .75; }
+
+.stage { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+.stage-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 14px; color: var(--muted); }
+.count { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); white-space: nowrap; }
+#status { font-weight: 600; color: var(--signal); text-align: right; }
+#stageEn { font-family: var(--font-read); font-size: 22px; line-height: 1.5; margin: 0; }
+#stageEn .miss { color: var(--miss); background: var(--miss-bg); border-radius: 4px; padding: 0 2px; text-decoration: underline; text-decoration-thickness: 2px; }
+#stageEn .hit { color: var(--good); }
+#stageKo { margin: 0; color: var(--muted); font-size: 17px; }
+.result { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.score { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+.score small { font-size: 15px; font-weight: 500; color: var(--muted); margin-left: 6px; }
+.heard, .tip { margin: 0; font-size: 15px; }
+.heard { color: var(--muted); }
+.label { font-weight: 600; color: var(--ink); margin-right: 6px; }
+.note { font-size: 14px; color: var(--muted); margin: 0; }
+
+.script h2 { font-size: 15px; font-weight: 600; color: var(--muted); margin: 6px 0 4px; }
+.script ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.script li { border-top: 1px solid var(--line); }
+.script li button { width: 100%; text-align: left; background: none; border: 0; padding: 14px 0; display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 4px 8px; }
+.script .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--muted); }
+.script .en { font-family: var(--font-read); font-size: 18px; line-height: 1.5; }
+.script .ko { grid-column: 2; color: var(--muted); font-size: 15px; }
+.script li[aria-current="true"] .n, .script li[aria-current="true"] .en { color: var(--signal); }
+body.hide-ko .script .ko, body.hide-ko #stageKo { display: none; }
+.vocab { margin: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 14px; font-size: 15px; }
+.vocab dt { font-family: var(--font-read); font-weight: 600; }
+.vocab dd { margin: 0; color: var(--muted); }
+
+.bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+}
+.bar-in { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px; }
+.opts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; color: var(--muted); }
+.chip { min-height: 40px; padding: 0 14px; border-radius: 20px; border: 1.5px solid var(--line); background: transparent; font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+.opts .push { margin-left: auto; }
+.transport { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 10px; }
+.transport button { min-height: 76px; border-radius: 16px; border: 1.5px solid var(--line); background: transparent; font-size: 17px; font-weight: 600; }
+.transport #play { background: var(--signal); border-color: var(--signal); color: var(--signal-ink); font-size: 20px; }
+#mic { min-height: 76px; border-radius: 16px; border: 2px solid var(--signal); background: transparent; color: var(--signal); font-size: 20px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px; }
+#mic svg { width: 26px; height: 26px; fill: currentColor; }
+#mic.ready { background: var(--signal); color: var(--signal-ink); }
+#mic.on { background: var(--miss); border-color: var(--miss); color: #fff; }
+@media (prefers-reduced-motion: no-preference) {
+  #mic.on { animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .7; } }
+}
+.empty { padding: 40px 0; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <header>
+    <div class="top">
+      <div class="eyebrow" id="eyebrow">드라이브 영어</div>
+    </div>
+    <h1 id="title">오늘의 기사를 불러오는 중…</h1>
+    <p class="title-ko" id="titleKo"></p>
+    <p class="source" id="sourceRow" hidden>CNN 기사를 바탕으로 학습용으로 다시 쓴 스크립트입니다 · <a id="sourceLink" target="_blank" rel="noopener">CNN 원문 보기</a></p>
+  </header>
+
+  <nav class="nav" aria-label="콘텐츠 이동">
+    <button type="button" class="main" id="openList">☰ 기사 목록</button>
+    <button type="button" data-go="stage">학습 화면</button>
+    <button type="button" data-go="scriptBox">전체 스크립트</button>
+    <button type="button" data-go="vocabBox" id="goVocab">오늘의 표현</button>
+  </nav>
+
+  <div class="modes" role="group" aria-label="학습 방식">
+    <button type="button" data-mode="all"><b>전체 듣기</b><small>처음부터 끝까지 이어서</small></button>
+    <button type="button" data-mode="gap"><b>끊어 듣기</b><small>문단마다 따라 할 틈을 둠</small></button>
+    <button type="button" data-mode="ko"><b>듣고 해석</b><small>영어 문단 뒤 한국어 해석</small></button>
+    <button type="button" data-mode="shadow"><b>따라 말하기</b><small>내 발음을 듣고 교정</small></button>
+  </div>
+
+  <section class="stage" id="stage" aria-label="지금 문단">
+    <div class="stage-head">
+      <div class="stage-top">
+        <span class="count" id="count"></span>
+        <span id="status" role="status" aria-live="polite"></span>
+      </div>
+      <nav class="pnav" id="pnav" aria-label="문단 이동"></nav>
+    </div>
+    <p id="stageEn" lang="en"></p>
+    <p id="stageKo"></p>
+    <div class="result" id="result" hidden>
+      <div class="score"><span id="scoreNum"></span><small id="scoreSub"></small></div>
+      <p class="heard"><span class="label">들린 말</span><span id="heard" lang="en"></span></p>
+      <p class="heard" id="missRow" hidden><span class="label">놓친 단어</span><span id="missWords" lang="en"></span></p>
+      <p class="tip" id="tipRow" hidden><span class="label">발음 팁</span><span id="tip"></span></p>
+    </div>
+    <p class="note" id="note" hidden></p>
+  </section>
+
+  <section class="script" id="scriptBox">
+    <h2>전체 스크립트 · 문단을 누르면 그 문단부터 재생</h2>
+    <ol id="list"></ol>
+  </section>
+
+  <section class="script" id="vocabBox" hidden>
+    <h2>오늘의 표현</h2>
+    <dl class="vocab" id="vocab"></dl>
+  </section>
+</div>
+
+<dialog id="sheet" aria-label="기사 목록">
+  <div class="sheet-head"><b>기사 목록</b><button type="button" id="sheetClose">닫기</button></div>
+  <ol id="lessonList"></ol>
+</dialog>
+
+<div class="bar" id="bar">
+  <div class="bar-in">
+    <div class="opts">
+      <span>속도</span>
+      <button type="button" class="chip" data-rate="0.8">0.8×</button>
+      <button type="button" class="chip" data-rate="1">1.0×</button>
+      <button type="button" class="chip" data-rate="1.2">1.2×</button>
+      <button type="button" class="chip push" id="koToggle" aria-pressed="true">해석 표시</button>
+    </div>
+    <button type="button" id="mic" hidden>
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v5a4 4 0 0 0 4 4zm7-4a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21a1 1 0 1 0 2 0v-3.08A7 7 0 0 0 19 11z"/></svg>
+      <span id="micLabel">눌러서 따라 말하기</span>
+    </button>
+    <div class="transport">
+      <button type="button" id="prev">이전</button>
+      <button type="button" id="play">재생</button>
+      <button type="button" id="next">다음</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const CANCEL = { cancel: true };
+const PASS = 80;          // 이 점수 이상이면 다음 문단으로
+const MAX_TRIES = 2;      // 같은 문단을 이만큼 시도하면 점수와 상관없이 넘어간다
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("de." + k); return v === null ? d : v; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("de." + k, v); } catch {} },
+};
+const state = {
+  mode: store.get("mode", "all"),
+  rate: Number(store.get("rate", "1")) || 1,
+  showKo: store.get("ko", "1") === "1",
+  idx: 0, busy: false, tries: 0,
+};
+let LESSON = null, P = [], LIST = [];
+let run = 0;                       // 재생 흐름 토큰: 바뀌면 이전 흐름은 조용히 끝난다
+let rec = null, listening = false, heard = "", recError = "";
+let silenceTimer = 0, maxTimer = 0, countTimer = 0, wake = null;
+
+/* ---------- 화면 ---------- */
+function setStatus(t) { $("status").textContent = t; }
+function setBusy(b) { state.busy = b; $("play").textContent = b ? "정지" : "재생"; }
+function showNote(t) { $("note").textContent = t || ""; $("note").hidden = !t; }
+
+function select(i) {
+  state.idx = Math.max(0, Math.min(P.length - 1, i));
+  const p = P[state.idx];
+  $("count").textContent = "문단 " + (state.idx + 1) + " / " + P.length;
+  drawEn(p.en);
+  $("stageKo").textContent = p.ko;
+  $("result").hidden = true;
+  $("stage").classList.remove("ko-phase");
+  $("stage").scrollTop = 0;
+  [...$("list").children].forEach((li, n) => li.setAttribute("aria-current", n === state.idx ? "true" : "false"));
+  [...$("pnav").children].forEach((b, n) => b.setAttribute("aria-current", n === state.idx ? "true" : "false"));
+}
+function drawEn(text) {                           // 단어마다 span: 읽는 위치 표시용 (순서는 words() 와 같다)
+  const en = $("stageEn"); en.textContent = "";
+  text.split(/(\s+|[-–—\/])/).forEach((piece) => {
+    if (!piece) return;
+    if (!piece.toLowerCase().replace(/[^a-z0-9]/g, "")) { en.append(piece); return; }
+    const s = document.createElement("span"); s.className = "w"; s.textContent = piece;
+    en.append(s);
+  });
+}
+function setFocus(on) {                           // 재생 중에는 지금 문단을 화면 가득 크게
+  document.body.classList.toggle("focus", on);
+  if (!on) $("stage").classList.remove("ko-phase");
+}
+let wordTimer = 0;
+function stopTrack() {
+  clearInterval(wordTimer); wordTimer = 0;
+  $("stageEn").querySelectorAll(".now").forEach((s) => s.classList.remove("now"));
+}
+function track(marks) {                           // 음성 위치에 맞춰 지금 읽는 단어를 표시하고 따라 스크롤
+  stopTrack();
+  const spans = $("stageEn").querySelectorAll(".w");
+  if (spans.length !== marks.length) return;
+  let cur = -1;
+  wordTimer = setInterval(() => {
+    const t = audio.currentTime * 1000 + 60;
+    let i = cur;
+    while (i + 1 < marks.length && marks[i + 1][0] <= t) i++;
+    if (i === cur) return;
+    if (cur >= 0) spans[cur].classList.remove("now");
+    cur = i;
+    spans[i].classList.add("now");
+    if (!document.body.classList.contains("focus")) return;
+    const st = $("stage"), r = spans[i].getBoundingClientRect(), b = st.getBoundingClientRect();
+    if (r.bottom > b.bottom - 70 || r.top < b.top + 130)
+      st.scrollTo({ top: st.scrollTop + r.top - b.top - b.height * 0.35, behavior: "smooth" });
+  }, 60);
+}
+function jump(i) { halt(); state.tries = 0; select(i); play(); }
+
+function applyOptions() {
+  document.querySelectorAll(".modes button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.mode === state.mode)));
+  document.querySelectorAll("[data-rate]").forEach((b) => b.setAttribute("aria-pressed", String(Number(b.dataset.rate) === state.rate)));
+  const ko = state.showKo || state.mode === "ko";
+  $("koToggle").setAttribute("aria-pressed", String(ko));
+  document.body.classList.toggle("hide-ko", !ko);
+  $("mic").hidden = !(state.mode === "shadow" && SR);
+  showNote(state.mode === "shadow" && !SR
+    ? "이 브라우저는 발음 채점을 지원하지 않아, 문단 뒤에 따라 말할 시간만 드립니다. 아이폰에서는 Safari로 열어 주세요."
+    : "");
+}
+
+function render() {
+  P = LESSON.paragraphs;
+  $("eyebrow").textContent = LESSON.date.split("-").join(".") + " · CNN " + (LESSON.section || "");
+  $("title").textContent = LESSON.title;
+  $("titleKo").textContent = LESSON.title_ko;
+  $("sourceLink").href = LESSON.source_url;
+  $("sourceRow").hidden = false;
+  $("list").textContent = ""; $("vocab").textContent = ""; $("pnav").textContent = "";
+  [...$("lessonList").children].forEach((li) => li.setAttribute("aria-current", String(li.dataset.date === LESSON.date)));
+  P.forEach((p, i) => {
+    const li = document.createElement("li");
+    const b = document.createElement("button"); b.type = "button";
+    const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
+    const en = document.createElement("span"); en.className = "en"; en.lang = "en"; en.textContent = p.en;
+    const ko = document.createElement("span"); ko.className = "ko"; ko.textContent = p.ko;
+    b.append(n, en, ko);
+    b.onclick = () => jump(i);
+    li.append(b);
+    $("list").append(li);
+    const pb = document.createElement("button"); pb.type = "button"; pb.textContent = i + 1;
+    pb.setAttribute("aria-label", (i + 1) + "번 문단");
+    pb.onclick = () => jump(i);
+    $("pnav").append(pb);
+  });
+  const vocab = LESSON.vocab || [];
+  $("vocabBox").hidden = !vocab.length; $("goVocab").hidden = !vocab.length;
+  vocab.forEach((v) => {
+    const dt = document.createElement("dt"); dt.lang = "en"; dt.textContent = v.word;
+    const dd = document.createElement("dd"); dd.textContent = v.ko;
+    $("vocab").append(dt, dd);
+  });
+  select(0);
+  setStatus("재생을 눌러 시작하세요");
+}
+
+/* ---------- 소리 내기 ---------- */
+// 아이폰은 사용자가 누른 뒤에만 소리를 허용한다. 요소 하나를 계속 재사용해야
+// 첫 탭 이후의 자동 재생(다음 문단, 해석, 팁)이 막히지 않는다.
+const audio = new Audio();
+audio.preload = "auto";
+audio.setAttribute("playsinline", "");
+let pending = null, segTimer = 0;
+
+function endClip(err) {
+  clearInterval(segTimer);
+  const p = pending; pending = null;
+  if (p) err ? p.fail(err) : p.ok();
+}
+audio.addEventListener("ended", () => endClip());
+audio.addEventListener("error", () => endClip({ code: "audio_error" }));
+
+function playClip(src, rate, from, to) {         // from/to: 밀리초 구간(놓친 구절만 재생)
+  return new Promise((ok, fail) => {
+    endClip(CANCEL);
+    pending = { ok, fail };
+    const begin = () => {
+      if (!pending || pending.ok !== ok) return;
+      try { if (from != null) audio.currentTime = Math.max(0, from / 1000 - 0.12); } catch {}
+      audio.defaultPlaybackRate = rate; audio.playbackRate = rate;
+      const pr = audio.play();
+      if (pr) pr.then(() => { audio.playbackRate = rate; }).catch((e) => endClip({ code: e && e.name === "NotAllowedError" ? "no_gesture" : "audio_error" }));
+      if (to != null) {
+        clearInterval(segTimer);
+        segTimer = setInterval(() => { if (audio.currentTime * 1000 >= to + 150) { audio.pause(); endClip(); } }, 40);
+      }
+    };
+    const url = new URL(src, location.href).href;
+    if (audio.src !== url) {
+      audio.src = url;
+      if (from != null) audio.addEventListener("loadedmetadata", begin, { once: true }); else begin();
+    } else if (from == null) { audio.currentTime = 0; begin(); }
+    else begin();
+  });
+}
+
+function pickVoice(lang) {
+  const all = speechSynthesis.getVoices().filter((v) => v.lang.replace("_", "-").startsWith(lang));
+  const liked = /Samantha|Ava|Evan|Google US English|Aria|Jenny|Yuna|Google 한국/i;
+  return all.find((v) => liked.test(v.name)) || all[0] || null;
+}
+function deviceSay(text, lang, rate) {            // 휴대폰 내장 음성 (MP3가 없을 때, 점수 읽을 때)
+  return new Promise((ok, fail) => {
+    if (!("speechSynthesis" in window)) return fail({ code: "no_voice" });
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang === "ko" ? "ko-KR" : "en-US";
+    const v = pickVoice(u.lang); if (v) u.voice = v;
+    u.rate = rate || 1;
+    u.onend = () => ok();
+    u.onerror = () => ok();                      // 내장 음성 실패는 흐름을 끊지 않는다
+    speechSynthesis.speak(u);
+  });
+}
+function say(clip, text, lang, rate) {
+  return clip ? playClip(clip, rate || 1) : deviceSay(text, lang, rate);
+}
+function hush() {
+  stopTrack();
+  audio.pause(); endClip(CANCEL);
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+function alive(my) { if (my !== run) throw CANCEL; }
+
+function halt() {                                // 읽기·듣기를 모두 멈춘다
+  run++;
+  hush();
+  if (rec) { try { rec.abort(); } catch {} }
+  listening = false; clearTimers(); drawMic(false);
+  setBusy(false); setFocus(false);
+}
+function sayError(e) {
+  const code = e && e.code;
+  setStatus(code === "no_gesture" ? "재생을 한 번 더 눌러 주세요"
+    : code === "no_voice" ? "이 브라우저에서는 소리를 낼 수 없습니다"
+    : "소리를 불러오지 못했습니다. 연결을 확인하고 다시 눌러 주세요");
+}
+async function keepAwake() {
+  try { if (!wake && navigator.wakeLock) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); } } catch {}
+}
+
+async function play() {
+  if (!LESSON) return;
+  const my = ++run;
+  setBusy(true); setFocus(true);
+  keepAwake();
+  try {
+    const mode = state.mode;
+    const rate = state.rate * (mode === "shadow" ? 0.9 : 1);
+    for (let i = state.idx; i < P.length; i++) {
+      select(i);
+      const a = P[i].audio || {};
+      setStatus("영어로 읽는 중");
+      const t0 = performance.now();
+      const reading = say(a.en, P[i].en, "en", rate);
+      if (a.en && P[i].marks) track(P[i].marks);
+      await reading; alive(my);
+      stopTrack();
+      const took = performance.now() - t0;
+      if (mode === "ko") {
+        setStatus("한국어 해석");
+        $("stage").classList.add("ko-phase"); $("stage").scrollTop = 0;
+        await sleep(300); alive(my);
+        await say(a.ko, P[i].ko, "ko", 1); alive(my);
+        await sleep(600); alive(my);
+      } else if (mode === "shadow" && SR) {
+        setStatus("Repeat");
+        await sleep(250); alive(my);
+        await playClip("audio/repeat.mp3", 1).catch((e) => { if (e === CANCEL) throw e; return deviceSay("Repeat.", "en", 1); });
+        alive(my);
+        setBusy(false);
+        startListen(true);                        // 탭 없이 마이크를 열어 본다. 막히면 버튼을 누르게 한다
+        return;
+      } else if (mode === "gap" || mode === "shadow") {
+        setStatus("따라 말해 보세요");
+        await sleep(took * 1.15 + 800); alive(my);
+      } else {
+        await sleep(350); alive(my);
+      }
+    }
+    setStatus("오늘 학습 끝. 수고하셨습니다");
+    select(0);
+  } catch (e) {
+    if (e === CANCEL || my !== run) return;
+    sayError(e);
+  }
+  if (my === run) { setBusy(false); setFocus(false); }
+}
+
+/* ---------- 따라 말하기: 듣고 채점 ---------- */
+function clearTimers() { clearTimeout(silenceTimer); clearTimeout(maxTimer); clearInterval(countTimer); }
+function listenLimit() {                          // 문단 길이에 맞춘 말하기 시간(밀리초). 지나면 자동으로 분석한다
+  const p = P[state.idx];
+  const len = p.marks && p.marks.length ? p.marks[p.marks.length - 1][1] : words(p.en).length * 420;
+  return Math.min(60000, Math.round(len * 1.5 + 4000));
+}
+function drawMic(ready) {
+  $("mic").classList.toggle("on", listening);
+  $("mic").classList.toggle("ready", !!ready && !listening);
+  $("micLabel").textContent = listening ? "듣는 중 · 다 말했으면 누르기" : "눌러서 따라 말하기";
+}
+function words(s) {                               // build.py 의 tokens() 와 같은 규칙
+  return s.replace(/[-–—\/]/g, " ").split(/\s+/)
+    .map((raw) => ({ raw, n: raw.toLowerCase().replace(/[^a-z0-9]/g, "") }))
+    .filter((w) => w.n);
+}
+function align(target, said) {                    // 가장 긴 공통 부분열로 맞은 단어를 찾는다
+  const n = target.length, m = said.length;
+  const dp = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+    dp[i][j] = target[i].n === said[j].n ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const hit = new Array(n).fill(false);
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (target[i].n === said[j].n) { hit[i] = true; i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) i++; else j++;
+  }
+  return hit;
+}
+function missedSpans(target, hit) {               // 놓친 단어를 앞뒤 한 단어와 묶은 구간 [시작, 끝]
+  const out = [];
+  let i = 0;
+  while (i < target.length) {
+    if (hit[i]) { i++; continue; }
+    let j = i;
+    while (j + 1 < target.length && (!hit[j + 1] || (j + 2 < target.length && !hit[j + 2]))) j++;
+    const a = Math.max(0, i - 1);
+    out.push([a, Math.min(target.length - 1, j + 1, a + 9)]);   // 너무 긴 구간은 앞 열 단어만
+    i = j + 1;
+  }
+  return out.slice(0, 4);
+}
+
+function onHeard() {
+  $("heard").textContent = heard;
+  $("result").hidden = false;
+  $("scoreNum").textContent = ""; $("scoreSub").textContent = ""; $("tipRow").hidden = true; $("missRow").hidden = true;
+  clearTimeout(silenceTimer);
+  const enough = words(heard).length >= words(P[state.idx].en).length * 0.9;
+  silenceTimer = setTimeout(stopListen, enough ? 1400 : 3000);
+}
+function stopListen() { clearTimers(); if (rec && listening) { try { rec.stop(); } catch {} } }
+
+function startListen(auto) {
+  hush();
+  const my = ++run;
+  heard = ""; recError = "";
+  rec = new SR();
+  rec.lang = "en-US"; rec.continuous = true; rec.interimResults = true; rec.maxAlternatives = 1;
+  const mine = rec;
+  rec.onstart = () => {
+    if (my !== run) return;
+    listening = true; drawMic(false); keepAwake();
+    const limit = listenLimit(), until = Date.now() + limit;
+    const tick = () => setStatus("듣고 있어요 · 남은 시간 " + Math.max(0, Math.ceil((until - Date.now()) / 1000)) + "초");
+    tick(); countTimer = setInterval(tick, 500);
+    maxTimer = setTimeout(() => { setStatus("분석 중…"); stopListen(); }, limit);   // 시간이 다 되면 자동으로 분석
+  };
+  rec.onresult = (e) => {
+    if (my !== run) return;
+    let t = "";
+    for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + " ";
+    heard = t.replace(/\s+/g, " ").trim();
+    if (heard) onHeard();
+  };
+  rec.onerror = (e) => { recError = e.error || "error"; };
+  rec.onend = () => {
+    if (rec === mine) rec = null;
+    const was = listening;
+    listening = false; clearTimers();
+    if (my !== run) { drawMic(false); return; }
+    if (recError === "not-allowed" || recError === "service-not-allowed" || (!was && !heard)) {
+      drawMic(true);
+      setStatus(auto ? "마이크를 누르고 따라 말하세요"
+        : "마이크를 쓸 수 없습니다. Safari의 마이크 허용과 아이폰의 받아쓰기(Siri) 설정을 확인해 주세요");
+      return;
+    }
+    drawMic(false);
+    grade(heard);
+  };
+  try { rec.start(); setStatus("마이크 여는 중…"); }
+  catch { rec = null; drawMic(true); setStatus("마이크를 누르고 따라 말하세요"); }
+}
+
+async function grade(text) {
+  const p = P[state.idx], a = p.audio || {};
+  if (!text) { drawMic(true); setStatus("말소리를 못 들었어요. 마이크를 눌러 다시 말해 보세요"); $("result").hidden = true; return; }
+  const target = words(p.en), said = words(text);
+  const hit = align(target, said);
+  const got = hit.filter(Boolean).length;
+  const score = Math.round((got / target.length) * 100);
+  const spans = missedSpans(target, hit);
+  state.tries++;
+
+  const en = $("stageEn"); en.textContent = "";
+  target.forEach((w, i) => {
+    const s = document.createElement("span");
+    s.className = hit[i] ? "hit" : "miss"; s.textContent = w.raw;
+    en.append(s, " ");
+  });
+  $("heard").textContent = text;
+  $("scoreNum").textContent = score + "점";
+  $("scoreSub").textContent = target.length + "단어 중 " + got + "단어 인식";
+  $("result").hidden = false; $("tipRow").hidden = true;
+  const missed = [...new Set(target.filter((w, i) => !hit[i]).map((w) => w.n))];
+  $("missWords").textContent = missed.slice(0, 12).join(", ") + (missed.length > 12 ? " …" : "");
+  $("missRow").hidden = !missed.length;
+
+  const my = ++run;
+  setBusy(true); setFocus(true);
+  $("stage").scrollTop = 0;
+  const pass = score >= PASS;
+  try {
+    setStatus(!missed.length ? "완벽해요" : pass ? "좋아요. 빨간 부분만 다시 들어 보세요" : "빨간 부분을 다시 들어 보세요");
+    await deviceSay(score + "점. " + (!missed.length ? "완벽해요." : (pass ? "좋아요. " : "") + "놓친 부분을 다시 들어 보세요."), "ko", 1); alive(my);
+    for (const [s, e] of spans) {                 // 놓친 구절만 천천히 다시 들려준다
+      await sleep(250); alive(my);
+      if (a.en && p.marks) await playClip(a.en, 0.8, p.marks[s][0], p.marks[e][1]);
+      else await deviceSay(target.slice(s, e + 1).map((w) => w.raw).join(" "), "en", 0.8);
+      alive(my);
+    }
+    if ((!pass || missed.length >= 3) && p.tip) {
+      $("tip").textContent = p.tip; $("tipRow").hidden = false;
+      await sleep(250); alive(my);
+      await say(a.tip, p.tip, "ko", 1); alive(my);
+    }
+    await sleep(500); alive(my);
+    if (pass || state.tries >= MAX_TRIES) {
+      state.tries = 0;
+      if (state.idx >= P.length - 1) { setStatus("오늘 학습 끝. 수고하셨습니다"); setBusy(false); setFocus(false); return; }
+      state.idx++;
+    }
+    return play();                                // 통과: 다음 문단 / 미통과: 같은 문단 한 번 더
+  } catch (e) {
+    if (e === CANCEL || my !== run) return;
+    sayError(e);
+  }
+  if (my === run) { setBusy(false); setFocus(false); }
+}
+
+/* ---------- 시작 ---------- */
+async function getJSON(url) {
+  const r = await fetch(url, { cache: "no-store" });
+  if (!r.ok) throw new Error(String(r.status));
+  return r.json();
+}
+async function load(date) {
+  halt();
+  try {
+    LESSON = await getJSON("lessons/" + date + ".json");
+    state.tries = 0;
+    render();
+  } catch {
+    LESSON = null;
+    $("title").textContent = "기사를 불러오지 못했습니다";
+    $("titleKo").textContent = "연결을 확인하고 새로 고침해 주세요.";
+  }
+}
+async function init() {
+  applyOptions();
+  let list = [];
+  try { list = (await getJSON("lessons/index.json")).lessons || []; } catch {}
+  if (!list.length) {
+    $("title").textContent = "아직 준비된 기사가 없습니다";
+    $("titleKo").textContent = "매일 저녁 6시에 새 기사가 올라옵니다.";
+    return;
+  }
+  LIST = list;
+  list.slice().reverse().forEach((l) => {
+    const li = document.createElement("li"); li.dataset.date = l.date;
+    const b = document.createElement("button"); b.type = "button";
+    const d = document.createElement("span"); d.className = "d"; d.textContent = l.date.split("-").join(".");
+    const t = document.createElement("span"); t.className = "t"; t.lang = "en"; t.textContent = l.title;
+    b.append(d, t);
+    b.onclick = () => { $("sheet").close(); load(l.date); window.scrollTo(0, 0); };
+    li.append(b);
+    $("lessonList").append(li);
+  });
+  const want = new URLSearchParams(location.search).get("d");
+  const date = list.some((l) => l.date === want) ? want : list[list.length - 1].date;
+  await load(date);
+}
+
+document.querySelectorAll(".modes button").forEach((b) => {
+  b.onclick = () => { halt(); state.mode = b.dataset.mode; state.tries = 0; store.set("mode", state.mode); applyOptions(); if (LESSON) { select(state.idx); setStatus("재생을 눌러 시작하세요"); } };
+});
+document.querySelectorAll("[data-rate]").forEach((b) => {
+  b.onclick = () => { state.rate = Number(b.dataset.rate); store.set("rate", String(state.rate)); applyOptions(); };
+});
+$("koToggle").onclick = () => { state.showKo = !state.showKo; store.set("ko", state.showKo ? "1" : "0"); applyOptions(); };
+$("play").onclick = () => { if (state.busy || listening) { halt(); setStatus("멈췄습니다"); } else play(); };
+$("prev").onclick = () => { if (!LESSON) return; halt(); state.tries = 0; select(state.idx - 1); play(); };
+$("next").onclick = () => { if (!LESSON) return; halt(); state.tries = 0; select(state.idx + 1); play(); };
+$("mic").onclick = () => { if (!LESSON) return; if (listening) stopListen(); else startListen(false); };
+$("openList").onclick = () => { if (LIST.length) $("sheet").showModal(); };
+$("sheetClose").onclick = () => $("sheet").close();
+$("sheet").onclick = (e) => { if (e.target === $("sheet")) $("sheet").close(); };
+document.querySelectorAll("[data-go]").forEach((b) => {
+  b.onclick = () => $(b.dataset.go).scrollIntoView({ behavior: "smooth", block: "start" });
+});
+new ResizeObserver(() => document.documentElement.style.setProperty("--bar-h", $("bar").offsetHeight + "px")).observe($("bar"));
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state.busy) keepAwake(); });
+init();
+</script>
+</body>
+</html>
